@@ -1,0 +1,6 @@
+{
+  "name": "MotoDash",
+  "description": "CarPlay y computadora de viaje inteligente para moto con telemetría TPMS, navegación y gestión de servicios",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
