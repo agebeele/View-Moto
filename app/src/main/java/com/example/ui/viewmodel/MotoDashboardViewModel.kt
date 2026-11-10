@@ -52,6 +52,7 @@ class MotoDashboardViewModel(application: Application) : AndroidViewModel(applic
 
     // Data streams from repository
     val profile: StateFlow<MotoProfile> = repository.profile
+    val garage: StateFlow<List<MotoProfile>> = repository.garage
     val tpms: StateFlow<TpmsData> = repository.tpms
     val activeTrip = repository.activeTrip
     val tripHistory: StateFlow<List<TripRecord>> = repository.tripHistory
@@ -66,9 +67,15 @@ class MotoDashboardViewModel(application: Application) : AndroidViewModel(applic
     val spotifyLikedTracks: StateFlow<List<SpotifyTrack>> = spotifyService.likedTracks
     val spotifyCurrentUser: StateFlow<SpotifyUser> = spotifyService.currentUser
     val spotifyAccounts: StateFlow<List<SpotifyUser>> = spotifyService.accounts
+    val spotifyAccessToken: StateFlow<String?> = spotifyService.accessToken
+    val spotifyIsAuthenticating: StateFlow<Boolean> = spotifyService.isAuthenticating
+    val spotifyAuthError: StateFlow<String?> = spotifyService.lastAuthError
 
     private val _showSpotifyScreen = MutableStateFlow(false)
     val showSpotifyScreen: StateFlow<Boolean> = _showSpotifyScreen.asStateFlow()
+
+    private val _showBikeSelectorDialog = MutableStateFlow(false)
+    val showBikeSelectorDialog: StateFlow<Boolean> = _showBikeSelectorDialog.asStateFlow()
 
     // Navigation and Tab selection
     private val _selectedTab = MutableStateFlow(0)
@@ -119,10 +126,7 @@ class MotoDashboardViewModel(application: Application) : AndroidViewModel(applic
     private var rideSimulationJob: Job? = null
 
     init {
-        // Initial welcome voice message
-        voiceAssistant.speak("MotoDash conectado. Sistemas de telemetría y sensores de presión verificados.")
-
-        // Sync Spotify playback with repository mediaState
+        // Sync Spotify playback with repository mediaState without unsolicited voice spam
         viewModelScope.launch {
             spotifyService.playbackState.collect { state ->
                 repository.updateMediaState(
@@ -287,37 +291,74 @@ class MotoDashboardViewModel(application: Application) : AndroidViewModel(applic
 
     fun switchSpotifyAccount(userId: String) {
         spotifyService.switchAccount(userId)
-        val name = spotifyCurrentUser.value.displayName
-        voiceAssistant.speak("Cuenta de Spotify cambiada a $name")
     }
 
     fun loginSpotify(usernameOrEmail: String, plan: String = "Spotify Premium") {
-        val user = spotifyService.login(usernameOrEmail, plan)
-        voiceAssistant.speak("Sesión iniciada en Spotify como ${user.displayName}")
+        spotifyService.login(usernameOrEmail, plan)
     }
 
     fun logoutSpotify() {
         spotifyService.logout()
-        voiceAssistant.speak("Sesión de Spotify cerrada.")
     }
 
-    // Fuel CRUD & Estimated Efficiency
+    fun openSpotifyLoginInBrowser() {
+        spotifyService.openSpotifyLoginInBrowser()
+    }
+
+    fun handleSpotifyRedirect(uri: Uri) {
+        spotifyService.handleOAuthRedirectUri(uri)
+    }
+
+    // Garage & Motorcycle Selector
+    fun setBikeSelectorVisible(visible: Boolean) {
+        _showBikeSelectorDialog.value = visible
+    }
+
+    fun switchActiveMotorcycle(motoId: String) {
+        repository.switchActiveMotorcycle(motoId)
+        _showBikeSelectorDialog.value = false
+    }
+
+    fun addMotorcycleToGarage(
+        nickname: String,
+        brandModel: String,
+        plateNumber: String,
+        odometerKm: Double,
+        themeMode: VisualThemeMode = VisualThemeMode.NEON_MAGENTA
+    ) {
+        val newMoto = MotoProfile(
+            id = "moto_${System.currentTimeMillis()}",
+            nickname = nickname.ifBlank { "MI MOTO" },
+            brandModel = brandModel.ifBlank { "MOTO" },
+            plateNumber = plateNumber.ifBlank { "MEX001" },
+            currentOdometerKm = odometerKm,
+            targetTirePressureFrontPsi = 29.0,
+            targetTirePressureRearPsi = 33.0,
+            themeMode = themeMode,
+            graphicStyle = BikeGraphicStyle.TRANSPARENT_STUDIO_PNG
+        )
+        repository.addMotorcycle(newMoto, makeActive = true)
+        _showBikeSelectorDialog.value = false
+    }
+
+    fun deleteMotorcycleFromGarage(motoId: String) {
+        repository.deleteMotorcycle(motoId)
+    }
+
+    // Fuel CRUD & Estimated Efficiency (Silenced TTS during typing/editing)
     fun updateEstimatedEfficiency(newKmPerL: Double) {
         repository.updateFuelStatsEstimatedEfficiency(newKmPerL)
-        voiceAssistant.speak("Rendimiento estimado actualizado a ${String.format("%.1f", newKmPerL)} km por litro.")
     }
 
     fun updateFuelEntry(entry: FuelEntry) {
         repository.updateFuelEntry(entry)
-        voiceAssistant.speak("Registro de combustible actualizado.")
     }
 
     fun deleteFuelEntry(entryId: String) {
         repository.deleteFuelEntry(entryId)
-        voiceAssistant.speak("Registro de combustible eliminado.")
     }
 
-    // Emergency Contact CRUD
+    // Emergency Contact CRUD (Silenced TTS during typing/editing)
     fun addEmergencyContact(
         name: String,
         phone: String,
@@ -334,17 +375,14 @@ class MotoDashboardViewModel(application: Application) : AndroidViewModel(applic
             voiceCommandAlias = voiceAlias.ifBlank { name.split(" ").firstOrNull() ?: "" }
         )
         repository.addEmergencyContact(newContact)
-        voiceAssistant.speak("Contacto de emergencia agregado: $name")
     }
 
     fun updateEmergencyContact(contact: EmergencyContact) {
         repository.updateEmergencyContact(contact)
-        voiceAssistant.speak("Contacto de emergencia actualizado: ${contact.name}")
     }
 
     fun deleteEmergencyContact(contactId: String) {
         repository.deleteEmergencyContact(contactId)
-        voiceAssistant.speak("Contacto de emergencia eliminado.")
     }
 
     fun triggerSimulatedTpmsWarning() {
@@ -356,12 +394,10 @@ class MotoDashboardViewModel(application: Application) : AndroidViewModel(applic
 
     fun resetTpmsToNormal() {
         repository.updateTpmsPressure(29.4, 32.8)
-        voiceAssistant.speak("Sensores TPMS calibrados. Presión en ambos neumáticos en rango seguro.")
     }
 
     fun updateOdometer(newKm: Double) {
         repository.updateOdometer(newKm)
-        voiceAssistant.speak("Odómetro actualizado a ${newKm.toInt()} kilómetros.")
     }
 
     fun addNewService(title: String, category: ServiceCategory, costMxn: Double, notes: String) {
@@ -375,7 +411,6 @@ class MotoDashboardViewModel(application: Application) : AndroidViewModel(applic
             notes = notes
         )
         repository.addServiceRecord(newRecord)
-        voiceAssistant.speak("Servicio registrado exitosamente: $title")
     }
 
     fun addNewFuelEntry(liters: Double, costMxn: Double) {
@@ -387,7 +422,6 @@ class MotoDashboardViewModel(application: Application) : AndroidViewModel(applic
             odometerKm = profile.value.currentOdometerKm
         )
         repository.addFuelEntry(newEntry)
-        voiceAssistant.speak("Carga de combustible guardada. Rendimiento actualizado.")
     }
 
     fun exportMaintenancePdfReport() {
@@ -400,7 +434,6 @@ class MotoDashboardViewModel(application: Application) : AndroidViewModel(applic
             _lastExportedPdfFile.value = file
             _pdfExportSuccessToast.value = "Reporte PDF generado: ${file.name}"
             pdfExporter.sharePdfReport(file)
-            voiceAssistant.speak("Reporte de mantenimiento exportado en PDF. Compartiendo documento.")
         } else {
             _pdfExportSuccessToast.value = "Error al generar archivo PDF."
         }
@@ -418,7 +451,6 @@ class MotoDashboardViewModel(application: Application) : AndroidViewModel(applic
             title = "Recordatorio Urgente: ${urgentInterval.name}",
             message = "Faltan solo ${urgentInterval.remainingKm.toInt()} km para el mantenimiento requerido. Agende cita en su taller de confianza."
         )
-        voiceAssistant.speak("Recordatorio urgente enviado a la barra de notificaciones.")
     }
 
     fun updateTheme(themeMode: VisualThemeMode) {
@@ -433,7 +465,21 @@ class MotoDashboardViewModel(application: Application) : AndroidViewModel(applic
                 graphicStyle = graphicStyle
             )
         }
-        voiceAssistant.speak("Configuración de moto actualizada: $nickname.")
+    }
+
+    fun saveProcessedCutoutBitmap(processed: Bitmap, style: BikeGraphicStyle = BikeGraphicStyle.TRANSPARENT_STUDIO_PNG) {
+        viewModelScope.launch {
+            _customBikePreviewBitmap.value = processed
+            val savedPath = imageProcessor.saveProcessedBitmap(processed)
+            if (savedPath != null) {
+                repository.updateProfile {
+                    it.copy(
+                        customImageUri = savedPath,
+                        graphicStyle = style
+                    )
+                }
+            }
+        }
     }
 
     fun processCustomMotorcycleImage(imageUri: Uri, style: BikeGraphicStyle) {
@@ -442,17 +488,7 @@ class MotoDashboardViewModel(application: Application) : AndroidViewModel(applic
             if (bitmap != null) {
                 val accentColor = android.graphics.Color.parseColor(profile.value.themeMode.hexAccent)
                 val processed = imageProcessor.processMotorcycleImage(bitmap, style, accentColor)
-                _customBikePreviewBitmap.value = processed
-                val savedPath = imageProcessor.saveProcessedBitmap(processed)
-                if (savedPath != null) {
-                    repository.updateProfile {
-                        it.copy(
-                            customImageUri = savedPath,
-                            graphicStyle = style
-                        )
-                    }
-                    voiceAssistant.speak("Imagen de tu moto vectorizada y procesada en PNG transparente.")
-                }
+                saveProcessedCutoutBitmap(processed, style)
             }
         }
     }

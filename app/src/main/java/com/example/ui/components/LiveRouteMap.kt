@@ -378,29 +378,18 @@ fun LiveRouteMap(
                     fullPath.lineTo(pt.x, pt.y)
                 }
 
-                // High contrast dark/halo casing (11dp)
+                // Clean, sharp street border casing (5.8dp)
                 drawPath(
                     path = fullPath,
-                    color = Color(0xFF060B12).copy(alpha = 0.85f),
+                    color = Color(0xFF0A0E17).copy(alpha = 0.90f),
                     style = Stroke(
-                        width = 11.dp.toPx(),
+                        width = 5.8.dp.toPx(),
                         cap = StrokeCap.Round,
                         join = StrokeJoin.Round
                     )
                 )
 
-                // High visibility neon glow under route
-                drawPath(
-                    path = fullPath,
-                    color = NeonCyan.copy(alpha = 0.45f),
-                    style = Stroke(
-                        width = 8.5.dp.toPx(),
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round
-                    )
-                )
-
-                // B) Route speed heatmap segments (Google Maps Style road core)
+                // B) Route speed heatmap segments (Google Maps Style road core, 4.2dp)
                 var accumulatedMeters = 0.0
                 var nextMilestoneKm = 1
 
@@ -413,7 +402,7 @@ fun LiveRouteMap(
                     val segmentSpeed = (p1.speedKmh + p2.speedKmh) / 2f
                     val segmentColor = if (showHeatmap) {
                         when {
-                            segmentSpeed < 40f -> RacingGreen      // Green for city/chill
+                            segmentSpeed < 40f -> RacingGreen      // Green for city
                             segmentSpeed < 80f -> SpeedAmber       // Amber for cruising
                             segmentSpeed < 120f -> ElectricOrange   // Orange for fast
                             else -> RacingRed                      // Red for high speed
@@ -422,12 +411,12 @@ fun LiveRouteMap(
                         NeonCyan
                     }
 
-                    // Main road polyline segment
+                    // Main road polyline segment hugging asphalt surface
                     drawLine(
                         color = segmentColor,
                         start = o1,
                         end = o2,
-                        strokeWidth = 5.5.dp.toPx(),
+                        strokeWidth = 4.2.dp.toPx(),
                         cap = StrokeCap.Round
                     )
 

@@ -78,6 +78,7 @@ fun CockpitScreen(
     onSimulateTpmsWarning: () -> Unit,
     onResetTpms: () -> Unit,
     onOpenSpotify: () -> Unit = {},
+    onOpenBikeSelector: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -115,19 +116,34 @@ fun CockpitScreen(
                 )
             }
 
-            Box(
+            // Interactive Motorcycle Selector Badge
+            androidx.compose.material3.Surface(
+                color = CockpitCardBg,
+                shape = RoundedCornerShape(10.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CockpitCardBorder),
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(CockpitCardBg)
-                    .border(1.dp, CockpitCardBorder, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onOpenBikeSelector() }
+                    .testTag("bike_selector_badge")
             ) {
-                Text(
-                    text = "300Z",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Black,
-                    color = accentColor
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = profile.badgeLabel,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Black,
+                        color = accentColor
+                    )
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Default.ArrowDropDown,
+                        contentDescription = "Escoger Moto",
+                        tint = accentColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
 

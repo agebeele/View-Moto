@@ -21,8 +21,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import android.content.Intent
+import android.net.Uri
 import com.example.ui.components.CarPlayNavBar
 import com.example.ui.screens.BikeCustomizationScreen
+import com.example.ui.screens.BikeSelectorDialog
 import com.example.ui.screens.CockpitScreen
 import com.example.ui.screens.EmergencyContactsDialog
 import com.example.ui.screens.FuelScreen
@@ -45,6 +48,9 @@ class MainActivity : ComponentActivity() {
         // Keep screen on during ride
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+        // Handle possible Spotify OAuth redirect from initial launch
+        intent?.data?.let { handleDeepLink(it) }
+
         setContent {
             val profile by viewModel.profile.collectAsState()
 
@@ -53,12 +59,26 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        intent?.data?.let { handleDeepLink(it) }
+    }
+
+    private fun handleDeepLink(uri: Uri) {
+        if (uri.scheme == "motodash" && uri.host == "callback") {
+            viewModel.handleSpotifyRedirect(uri)
+            viewModel.setSpotifyScreenVisible(true)
+        }
+    }
 }
 
 @Composable
 fun MainAppContent(viewModel: MotoDashboardViewModel) {
     val selectedTab by viewModel.selectedTab.collectAsState()
     val profile by viewModel.profile.collectAsState()
+    val garage by viewModel.garage.collectAsState()
+    val showBikeSelectorDialog by viewModel.showBikeSelectorDialog.collectAsState()
     val tpmsData by viewModel.tpms.collectAsState()
     val activeTrip by viewModel.activeTrip.collectAsState()
     val tripHistory by viewModel.tripHistory.collectAsState()

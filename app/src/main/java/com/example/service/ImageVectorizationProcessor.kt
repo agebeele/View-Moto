@@ -41,10 +41,69 @@ class ImageVectorizationProcessor(private val context: Context) {
         }
     }
 
+    private val httpClient = okhttp3.OkHttpClient.Builder()
+        .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+
     /**
-     * Creates a transparent PNG by removing dark/solid backgrounds
+     * Attempts to call RESTful Background Removal API (e.g. RemoveBG, ClipDrop, or Custom REST Endpoint).
+     * Automatically falls back to high-precision local cutout if offline or no key is provided.
      */
-    fun generateTransparentStudioCutout(source: Bitmap): Bitmap {
+    suspend fun removeBackgroundWithRestApi(
+        sourceBitmap: Bitmap,
+        apiEndpoint: String = "https://api.remove.bg/v1.0/removebg",
+        apiKey: String = ""
+    ): Bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (apiKey.isBlank()) {
+            // Local high-precision studio cutout
+            return@withContext extractTransparentMotorcyclePng(sourceBitmap, toleranceFraction = 0.38f, smoothEdges = true)
+        }
+
+        try {
+            val byteStream = java.io.ByteArrayOutputStream()
+            sourceBitmap.compress(Bitmap.CompressFormat.PNG, 95, byteStream)
+            val imageBytes = byteStream.toByteArray()
+
+            val requestBody = okhttp3.MultipartBody.Builder()
+                .setType(okhttp3.MultipartBody.FORM)
+                .addFormDataPart(
+                    "image_file",
+                    "motorcycle.png",
+                    okhttp3.RequestBody.create(okhttp3.MediaType.parse("image/png"), imageBytes)
+                )
+                .addFormDataPart("size", "auto")
+                .build()
+
+            val request = okhttp3.Request.Builder()
+                .url(apiEndpoint)
+                .addHeader("X-Api-Key", apiKey)
+                .post(requestBody)
+                .build()
+
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val responseBytes = response.body?.bytes()
+                if (responseBytes != null && responseBytes.isNotEmpty()) {
+                    val decoded = BitmapFactory.decodeByteArray(responseBytes, 0, responseBytes.size)
+                    if (decoded != null) return@withContext decoded
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Fallback to high-precision local cutout
+        extractTransparentMotorcyclePng(sourceBitmap, toleranceFraction = 0.38f, smoothEdges = true)
+    }
+
+    /**
+     * Creates a clean transparent PNG isolating the motorcycle from background.
+     * Uses multi-point corner sampling and adjustable color distance tolerance.
+     */
+    fun extractTransparentMotorcyclePng(
+        source: Bitmap,
+        toleranceFraction: Float = 0.38f,
+        smoothEdges: Boolean = true
+    ): Bitmap {
         val width = source.width
         val height = source.height
         val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -52,13 +111,24 @@ class ImageVectorizationProcessor(private val context: Context) {
         val pixels = IntArray(width * height)
         source.getPixels(pixels, 0, width, 0, 0, width, height)
 
-        // Sample corner colors for background estimation
-        val cornerColor = pixels[0]
-        val cornerR = Color.red(cornerColor)
-        val cornerG = Color.green(cornerColor)
-        val cornerB = Color.blue(cornerColor)
+        // Sample background from all 4 corners + top/bottom edge centers
+        val samplePoints = listOf(
+            0,
+            width - 1,
+            (height - 1) * width,
+            (height - 1) * width + (width - 1),
+            width / 2,
+            (height - 1) * width + (width / 2)
+        )
 
-        val threshold = 38.0
+        val bgSamples = samplePoints.map { idx ->
+            val c = pixels[idx]
+            Triple(Color.red(c), Color.green(c), Color.blue(c))
+        }
+
+        // Tolerance scaled between 15.0 and 120.0
+        val baseThreshold = (toleranceFraction * 120.0).coerceIn(15.0, 110.0)
+        val featherRange = if (smoothEdges) 22.0 else 6.0
 
         for (i in pixels.indices) {
             val pixel = pixels[i]
@@ -66,25 +136,38 @@ class ImageVectorizationProcessor(private val context: Context) {
             val g = Color.green(pixel)
             val b = Color.blue(pixel)
 
-            // Calculate distance to background color
-            val dist = sqrt(
-                ((r - cornerR) * (r - cornerR) +
-                 (g - cornerG) * (g - cornerG) +
-                 (b - cornerB) * (b - cornerB)).toDouble()
-            )
+            // Calculate min distance to any background sample
+            var minDist = Double.MAX_VALUE
+            for (sample in bgSamples) {
+                val dr = r - sample.first
+                val dg = g - sample.second
+                val db = b - sample.third
+                val dist = sqrt((dr * dr + dg * dg + db * db).toDouble())
+                if (dist < minDist) {
+                    minDist = dist
+                }
+            }
 
-            if (dist < threshold) {
-                // Background pixel: set completely transparent
+            if (minDist < baseThreshold) {
+                // Background pixel: completely transparent
                 pixels[i] = Color.TRANSPARENT
-            } else if (dist < threshold + 25.0) {
-                // Smooth edge anti-aliasing / feathering
-                val alpha = (((dist - threshold) / 25.0) * 255).toInt().coerceIn(0, 255)
+            } else if (smoothEdges && minDist < baseThreshold + featherRange) {
+                // Edge feathering to eliminate harsh pixel fringes
+                val factor = ((minDist - baseThreshold) / featherRange).coerceIn(0.0, 1.0)
+                val alpha = (factor * 255).toInt()
                 pixels[i] = Color.argb(alpha, r, g, b)
             }
         }
 
         output.setPixels(pixels, 0, width, 0, 0, width, height)
         return output
+    }
+
+    /**
+     * Backward-compatible default studio cutout
+     */
+    fun generateTransparentStudioCutout(source: Bitmap): Bitmap {
+        return extractTransparentMotorcyclePng(source, toleranceFraction = 0.38f, smoothEdges = true)
     }
 
     /**

@@ -95,6 +95,7 @@ fun SpotifyScreen(
     onToggleRepeat: () -> Unit,
     onSwitchAccount: (String) -> Unit,
     onLogin: (String, String) -> Unit,
+    onLoginWithWeb: () -> Unit = {},
     onLogout: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
@@ -678,10 +679,41 @@ fun SpotifyScreen(
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Primary: Official Web Authorization flow via accounts.spotify.com
+                    Button(
+                        onClick = {
+                            onLoginWithWeb()
+                            showAccountDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = SpotifyGreen),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("spotify_web_login_button")
+                    ) {
+                        Icon(imageVector = Icons.Default.Login, contentDescription = null, tint = Color.Black)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Iniciar Sesión Oficial (Web Spotify)",
+                            color = Color.Black,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 13.sp
+                        )
+                    }
+
+                    Text(
+                        text = "Abre accounts.spotify.com para autorizar y sincronizar tu perfil real y canciones de 'Tus Me Gusta' mediante la API de Spotify.",
+                        fontSize = 10.sp,
+                        color = TextSecondary,
+                        lineHeight = 14.sp
+                    )
+
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "O inicia sesión con una nueva cuenta:",
-                        fontSize = 12.sp,
+                        text = "O ingresa con usuario rápido:",
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = HighContrastWhite
                     )
@@ -708,13 +740,11 @@ fun SpotifyScreen(
                                 showAccountDialog = false
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = SpotifyGreen),
+                        colors = ButtonDefaults.buttonColors(containerColor = CockpitCardBorder),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(imageVector = Icons.Default.Login, contentDescription = null, tint = Color.Black)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Iniciar Sesión y Sincronizar", color = Color.Black, fontWeight = FontWeight.Bold)
+                        Text("Acceso Rápido Local", color = HighContrastWhite, fontWeight = FontWeight.Bold)
                     }
 
                     TextButton(

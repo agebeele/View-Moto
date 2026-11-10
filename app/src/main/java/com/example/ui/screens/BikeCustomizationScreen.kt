@@ -75,9 +75,13 @@ fun BikeCustomizationScreen(
     profile: MotoProfile,
     emergencyContacts: List<EmergencyContact>,
     customBikeBitmap: android.graphics.Bitmap?,
+    garageList: List<MotoProfile> = emptyList(),
+    imageProcessor: com.example.service.ImageVectorizationProcessor? = null,
     onThemeSelect: (VisualThemeMode) -> Unit,
     onUpdateBikeDetails: (String, String, BikeGraphicStyle) -> Unit,
     onProcessCustomImage: (Uri, BikeGraphicStyle) -> Unit,
+    onSaveCutoutBitmap: (android.graphics.Bitmap) -> Unit = {},
+    onOpenBikeSelector: () -> Unit = {},
     onExportPdf: () -> Unit,
     onOpenEmergencyDialog: () -> Unit,
     onOpenSpotify: () -> Unit = {},
@@ -91,11 +95,20 @@ fun BikeCustomizationScreen(
     var keepScreenOn by remember { mutableStateOf(true) }
     var floatingBubble by remember { mutableStateOf(true) }
 
+    var pendingCutoutBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var showCutoutDialog by remember { mutableStateOf(false) }
+
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            onProcessCustomImage(uri, selectedGraphicStyle)
+            val bitmap = imageProcessor?.loadBitmapFromUri(uri)
+            if (bitmap != null) {
+                pendingCutoutBitmap = bitmap
+                showCutoutDialog = true
+            } else {
+                onProcessCustomImage(uri, selectedGraphicStyle)
+            }
         }
     }
 
@@ -335,23 +348,130 @@ fun BikeCustomizationScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Button: Subir foto y vectorizar automáticamente
-                    Button(
-                        onClick = { photoPickerLauncher.launch("image/*") },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .testTag("upload_bike_photo_button")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.AddPhotoAlternate, contentDescription = null, tint = Color.White)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = { photoPickerLauncher.launch("image/*") },
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp)
+                                .testTag("upload_bike_photo_button")
+                        ) {
+                            Icon(imageVector = Icons.Default.AddPhotoAlternate, contentDescription = null, tint = Color.Black)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Cargar Foto",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.Black
+                            )
+                        }
+
+                        if (customBikeBitmap != null && imageProcessor != null) {
+                            Button(
+                                onClick = {
+                                    pendingCutoutBitmap = customBikeBitmap
+                                    showCutoutDialog = true
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = CockpitCardBorder),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(50.dp)
+                                    .testTag("open_cutout_editor_button")
+                            ) {
+                                Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, tint = accentColor)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Editor PNG",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = HighContrastWhite
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section: Mi Garaje de Motos (Selector & Manager)
+        item {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = CockpitCardBg),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, CockpitCardBorder, RoundedCornerShape(20.dp))
+                    .testTag("garage_manager_card")
+            ) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(accentColor.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = accentColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "MI GARAJE DE MOTOS",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Black,
+                                color = accentColor,
+                                letterSpacing = 1.2.sp
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(accentColor)
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "${garageList.size} REGISTRADAS",
+                                color = Color.Black,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Moto actualmente seleccionada: ${profile.nickname} (${profile.brandModel}). Puedes cambiar a otra moto de tu garaje o registrar una nueva.",
+                        fontSize = 12.sp,
+                        color = Color.LightGray
+                    )
+
+                    Button(
+                        onClick = onOpenBikeSelector,
+                        colors = ButtonDefaults.buttonColors(containerColor = accentColor.copy(alpha = 0.2f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Text(
-                            text = "Vectorizar Foto de mi Moto",
-                            fontSize = 14.sp,
+                            text = "Cambiar Moto o Agregar Nueva (${profile.badgeLabel})",
+                            color = accentColor,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            fontSize = 13.sp
                         )
                     }
                 }
@@ -637,4 +757,17 @@ fun BikeCustomizationScreen(
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
+
+    if (showCutoutDialog && pendingCutoutBitmap != null && imageProcessor != null) {
+        BikeImageCutoutDialog(
+            sourceBitmap = pendingCutoutBitmap!!,
+            imageProcessor = imageProcessor,
+            onConfirmCutout = { isolatedPng ->
+                onSaveCutoutBitmap(isolatedPng)
+                showCutoutDialog = false
+            },
+            onDismiss = { showCutoutDialog = false }
+        )
+    }
 }
+

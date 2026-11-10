@@ -23,16 +23,46 @@ import kotlinx.coroutines.flow.update
 
 class MotoRepository {
 
-    private val _profile = MutableStateFlow(
+    private val initialGarage = listOf(
         MotoProfile(
+            id = "moto_300z",
             nickname = "LA CHUCHA",
             brandModel = "ITALIKA 300Z",
             plateNumber = "94MZB1",
             currentOdometerKm = 3954.8,
+            targetTirePressureFrontPsi = 29.0,
+            targetTirePressureRearPsi = 33.0,
             themeMode = VisualThemeMode.NEON_MAGENTA,
+            graphicStyle = BikeGraphicStyle.TRANSPARENT_STUDIO_PNG
+        ),
+        MotoProfile(
+            id = "moto_mt03",
+            nickname = "DARK KNIGHT",
+            brandModel = "YAMAHA MT-03",
+            plateNumber = "72KLA3",
+            currentOdometerKm = 12450.0,
+            targetTirePressureFrontPsi = 29.0,
+            targetTirePressureRearPsi = 36.0,
+            themeMode = VisualThemeMode.CYBER_CYAN,
+            graphicStyle = BikeGraphicStyle.TRANSPARENT_STUDIO_PNG
+        ),
+        MotoProfile(
+            id = "moto_duke",
+            nickname = "LA BESTIA",
+            brandModel = "KTM 390 DUKE",
+            plateNumber = "31BVF9",
+            currentOdometerKm = 6800.0,
+            targetTirePressureFrontPsi = 29.0,
+            targetTirePressureRearPsi = 32.0,
+            themeMode = VisualThemeMode.RACING_ORANGE,
             graphicStyle = BikeGraphicStyle.TRANSPARENT_STUDIO_PNG
         )
     )
+
+    private val _garage = MutableStateFlow(initialGarage)
+    val garage: StateFlow<List<MotoProfile>> = _garage.asStateFlow()
+
+    private val _profile = MutableStateFlow(initialGarage[0])
     val profile: StateFlow<MotoProfile> = _profile.asStateFlow()
 
     private val _tpms = MutableStateFlow(
@@ -57,32 +87,80 @@ class MotoRepository {
     private val _activeTrip = MutableStateFlow(ActiveTripState())
     val activeTrip: StateFlow<ActiveTripState> = _activeTrip.asStateFlow()
 
-    private fun generateRoute(
-        startLat: Double,
-        startLon: Double,
-        endLat: Double,
-        endLon: Double,
+    /**
+     * Interpolates road-snapped waypoints between real street corridor intersection nodes.
+     */
+    private fun buildStreetSnappedRoute(
+        corridorNodes: List<Pair<Double, Double>>,
         speeds: List<Float>
     ): List<RoutePoint> {
         val count = speeds.size
-        return speeds.mapIndexed { index, speed ->
-            val t = index.toFloat() / (count - 1).coerceAtLeast(1)
-            val curveOffset = kotlin.math.sin(t * Math.PI) * 0.005
-            val lat = startLat + (endLat - startLat) * t + (curveOffset * 0.5)
-            val lon = startLon + (endLon - startLon) * t - (curveOffset * 0.7)
-            RoutePoint(
-                latitude = lat,
-                longitude = lon,
-                speedKmh = speed,
-                timestamp = System.currentTimeMillis() - ((count - index) * 60_000L),
-                altitude = 2240.0 + (index * 2.0)
+        val points = mutableListOf<RoutePoint>()
+        val totalSegments = (corridorNodes.size - 1).coerceAtLeast(1)
+
+        for (i in 0 until count) {
+            val globalFraction = i.toDouble() / (count - 1).coerceAtLeast(1)
+            val scaledIndex = globalFraction * totalSegments
+            val segIdx = scaledIndex.toInt().coerceIn(0, corridorNodes.size - 2)
+            val segFraction = scaledIndex - segIdx
+
+            val (lat1, lon1) = corridorNodes[segIdx]
+            val (lat2, lon2) = corridorNodes[segIdx + 1]
+
+            val lat = lat1 + (lat2 - lat1) * segFraction
+            val lon = lon1 + (lon2 - lon1) * segFraction
+
+            points.add(
+                RoutePoint(
+                    latitude = lat,
+                    longitude = lon,
+                    speedKmh = speeds[i],
+                    timestamp = System.currentTimeMillis() - ((count - i) * 60_000L),
+                    altitude = 2240.0 + (i * 1.5)
+                )
             )
         }
+        return points
     }
 
-    private val trip1Speeds = listOf(0f, 15f, 32f, 48f, 25f, 55f, 72f, 85f, 42f, 68f, 94f, 104f, 88f, 65f, 40f, 60f, 78f, 52f, 20f, 0f)
+    private val trip1Speeds = listOf(0f, 18f, 34f, 48f, 32f, 58f, 75f, 92f, 48f, 72f, 98f, 104f, 95f, 78f, 45f, 62f, 80f, 54f, 22f, 0f)
     private val trip2Speeds = listOf(0f, 22f, 45f, 63f, 50f, 30f, 15f, 0f)
     private val trip3Speeds = listOf(0f, 18f, 35f, 42f, 28f, 12f, 0f)
+
+    // Street Corridor Nodes strictly following CDMX Avenues and Freeways
+    // Trip 1: Polanco -> Mariano Escobedo -> Circuito Interior -> Viaducto Miguel Alemán / Río de la Piedad -> Calz. Ignacio Zaragoza -> Nezahualcóyotl
+    private val trip1StreetNodes = listOf(
+        Pair(19.4342, -99.1963), // Av. Pdte. Masaryk / Polanco
+        Pair(19.4368, -99.1840), // Masaryk & Mariano Escobedo
+        Pair(19.4310, -99.1742), // Mariano Escobedo onto Circuito Interior Melchor Ocampo
+        Pair(19.4215, -99.1770), // Circuito Interior passing Chapultepec
+        Pair(19.4055, -99.1672), // Viaducto Miguel Alemán westward curve
+        Pair(19.4042, -99.1480), // Viaducto crossing Av. Cuauhtémoc / Tlalpan
+        Pair(19.4070, -99.0980), // Viaducto Río de la Piedad / Autódromo Hnos. Rodríguez
+        Pair(19.4085, -99.0620), // Onto Calzada Ignacio Zaragoza
+        Pair(19.4022, -99.0350), // Av. Chimalhuacán entrance
+        Pair(19.4005, -99.0145)  // Nezahualcóyotl center
+    )
+
+    // Trip 2: Condesa -> Roma Norte (Av. Michoacán -> Av. Vicente Suárez -> Av. Álvaro Obregón -> Calle Orizaba/Colima)
+    private val trip2StreetNodes = listOf(
+        Pair(19.4116, -99.1729), // Av. Michoacán & Parque México
+        Pair(19.4140, -99.1702), // Av. Vicente Suárez
+        Pair(19.4162, -99.1675), // Plaza Popocatépetl / Av. México
+        Pair(19.4178, -99.1645), // Av. Álvaro Obregón / Insurgentes Sur
+        Pair(19.4190, -99.1618), // Av. Álvaro Obregón & Orizaba
+        Pair(19.4194, -99.1598)  // Calle Colima / Plaza Río de Janeiro, Roma Norte
+    )
+
+    // Trip 3: Narvarte -> Del Valle (Av. Xola -> Av. Gabriel Mancera -> Av. Eugenia / San Borja)
+    private val trip3StreetNodes = listOf(
+        Pair(19.3958, -99.1561), // Av. Xola / Narvarte Oriente
+        Pair(19.3952, -99.1585), // Av. Xola & Cuauhtémoc
+        Pair(19.3932, -99.1612), // Turning south onto Av. Gabriel Mancera
+        Pair(19.3872, -99.1632), // Gabriel Mancera crossing Av. Eugenia
+        Pair(19.3818, -99.1652), // Gabriel Mancera crossing San Borja
+        Pair(19.3789, -99.1672)  // Del Valle Sur / Félix Cuevas
+    )
 
     private val _tripHistory = MutableStateFlow(
         listOf(
@@ -101,7 +179,7 @@ class MotoRepository {
                 startLon = -99.1963,
                 endLat = 19.4005,
                 endLon = -99.0145,
-                routePoints = generateRoute(19.4342, -99.1963, 19.4005, -99.0145, trip1Speeds),
+                routePoints = buildStreetSnappedRoute(trip1StreetNodes, trip1Speeds),
                 speedHistorySamples = trip1Speeds
             ),
             TripRecord(
@@ -119,7 +197,7 @@ class MotoRepository {
                 startLon = -99.1729,
                 endLat = 19.4194,
                 endLon = -99.1598,
-                routePoints = generateRoute(19.4116, -99.1729, 19.4194, -99.1598, trip2Speeds),
+                routePoints = buildStreetSnappedRoute(trip2StreetNodes, trip2Speeds),
                 speedHistorySamples = trip2Speeds
             ),
             TripRecord(
@@ -137,7 +215,7 @@ class MotoRepository {
                 startLon = -99.1561,
                 endLat = 19.3789,
                 endLon = -99.1672,
-                routePoints = generateRoute(19.3958, -99.1561, 19.3789, -99.1672, trip3Speeds),
+                routePoints = buildStreetSnappedRoute(trip3StreetNodes, trip3Speeds),
                 speedHistorySamples = trip3Speeds
             )
         )
@@ -308,11 +386,61 @@ class MotoRepository {
     val mediaState: StateFlow<MediaPlaybackState> = _mediaState.asStateFlow()
 
     fun updateProfile(transform: (MotoProfile) -> MotoProfile) {
-        _profile.update(transform)
+        _profile.update { current ->
+            val updated = transform(current)
+            _garage.update { list ->
+                list.map { if (it.id == updated.id) updated else it }
+            }
+            updated
+        }
+    }
+
+    fun switchActiveMotorcycle(motoId: String) {
+        val target = _garage.value.find { it.id == motoId } ?: return
+        _profile.value = target
+        recalculateIntervals(target.currentOdometerKm)
+    }
+
+    fun addMotorcycle(moto: MotoProfile, makeActive: Boolean = true) {
+        _garage.update { list ->
+            list + moto
+        }
+        if (makeActive) {
+            _profile.value = moto
+            recalculateIntervals(moto.currentOdometerKm)
+        }
+    }
+
+    fun updateMotorcycle(moto: MotoProfile) {
+        _garage.update { list ->
+            list.map { if (it.id == moto.id) moto else it }
+        }
+        if (_profile.value.id == moto.id) {
+            _profile.value = moto
+            recalculateIntervals(moto.currentOdometerKm)
+        }
+    }
+
+    fun deleteMotorcycle(motoId: String) {
+        if (_garage.value.size <= 1) return // Keep at least one motorcycle
+        _garage.update { list ->
+            list.filter { it.id != motoId }
+        }
+        if (_profile.value.id == motoId) {
+            val fallback = _garage.value.firstOrNull() ?: return
+            _profile.value = fallback
+            recalculateIntervals(fallback.currentOdometerKm)
+        }
     }
 
     fun updateOdometer(newKm: Double) {
-        _profile.update { it.copy(currentOdometerKm = newKm) }
+        _profile.update { current ->
+            val updated = current.copy(currentOdometerKm = newKm)
+            _garage.update { list ->
+                list.map { if (it.id == updated.id) updated else it }
+            }
+            updated
+        }
         recalculateIntervals(newKm)
     }
 

@@ -1,6 +1,7 @@
 package com.example.model
 
 data class MotoProfile(
+    val id: String = "moto_300z",
     val nickname: String = "LA CHUCHA",
     val brandModel: String = "ITALIKA 300Z",
     val plateNumber: String = "94MZB1",
@@ -11,4 +12,7 @@ data class MotoProfile(
     val graphicStyle: BikeGraphicStyle = BikeGraphicStyle.TRANSPARENT_STUDIO_PNG,
     val customImageUri: String? = null,
     val glowColorHex: String = "#FF007F"
-)
+) {
+    val badgeLabel: String
+        get() = brandModel.substringAfterLast(" ", "300Z").take(6)
+}

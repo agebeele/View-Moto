@@ -1,9 +1,11 @@
 package com.example.service
 
 import android.content.Context
+import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.net.Uri
 import com.example.model.SpotifyPlaybackState
 import com.example.model.SpotifyTrack
 import com.example.model.SpotifyUser
@@ -18,6 +20,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
+import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
 import kotlin.math.sin
 
 class SpotifyMusicService(private val context: Context) {
@@ -26,27 +34,45 @@ class SpotifyMusicService(private val context: Context) {
     private var playbackTickerJob: Job? = null
     private var audioToneJob: Job? = null
 
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .build()
+
+    // Configurable Spotify Client ID for OAuth
+    var spotifyClientId: String = "4f8a846f48864132808c1097e88258dc"
+    var redirectUri: String = "motodash://callback"
+
+    private val _isAuthenticating = MutableStateFlow(false)
+    val isAuthenticating: StateFlow<Boolean> = _isAuthenticating.asStateFlow()
+
+    private val _lastAuthError = MutableStateFlow<String?>(null)
+    val lastAuthError: StateFlow<String?> = _lastAuthError.asStateFlow()
+
+    private val _accessToken = MutableStateFlow<String?>(null)
+    val accessToken: StateFlow<String?> = _accessToken.asStateFlow()
+
     // Saved accounts to switch easily
     private val defaultAccounts = listOf(
         SpotifyUser(
             id = "user_01",
             username = "rider_300z",
             displayName = "Rider 300Z",
-            email = "alex.rider@motodash.mx",
+            email = "rider@motodash.app",
             plan = "Spotify Premium",
             isConnected = true
         ),
         SpotifyUser(
             id = "user_02",
-            username = "motoclub_cdmx",
+            username = "motoclub_asfalto",
             displayName = "MotoClub Asfalto",
-            email = "club@asfalto.mx",
+            email = "asfalto@motoclub.mx",
             plan = "Spotify Duo",
             isConnected = false
         ),
         SpotifyUser(
             id = "user_03",
-            username = "track_day_pilot",
+            username = "piloto_nocturno",
             displayName = "Piloto Nocturno",
             email = "nocturno@speed.io",
             plan = "Spotify Premium",
@@ -87,6 +113,158 @@ class SpotifyMusicService(private val context: Context) {
         )
     )
     val playbackState: StateFlow<SpotifyPlaybackState> = _playbackState.asStateFlow()
+
+    /**
+     * Builds the official Spotify OAuth web authorization URL.
+     */
+    fun buildOAuthLoginUrl(): String {
+        val encodedRedirect = URLEncoder.encode(redirectUri, "UTF-8")
+        val scopes = URLEncoder.encode(
+            "user-read-private user-read-email user-library-read user-read-playback-state user-modify-playback-state playlist-read-private",
+            "UTF-8"
+        )
+        return "https://accounts.spotify.com/authorize?client_id=$spotifyClientId&response_type=token&redirect_uri=$encodedRedirect&scope=$scopes&show_dialog=true"
+    }
+
+    /**
+     * Redirects user to Spotify's official login page via web browser.
+     */
+    fun openSpotifyLoginInBrowser() {
+        val url = buildOAuthLoginUrl()
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(intent)
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Handles redirect from Spotify OAuth deep link callback (motodash://callback#access_token=...)
+     */
+    fun handleOAuthRedirectUri(uri: Uri) {
+        val fragment = uri.fragment ?: uri.query ?: ""
+        val token = fragment.split("&")
+            .find { it.startsWith("access_token=") }
+            ?.substringAfter("access_token=")
+
+        if (!token.isNullOrBlank()) {
+            _accessToken.value = token
+            fetchProfileAndLikedSongs(token)
+        } else {
+            val error = fragment.split("&")
+                .find { it.startsWith("error=") }
+                ?.substringAfter("error=")
+            _lastAuthError.value = error ?: "No se recibió token de acceso"
+        }
+    }
+
+    /**
+     * Calls Spotify RESTful API with OAuth Access Token to fetch Profile and Real Liked Songs.
+     */
+    fun fetchProfileAndLikedSongs(token: String) {
+        serviceScope.launch {
+            _isAuthenticating.value = true
+            _lastAuthError.value = null
+
+            try {
+                // 1. Fetch User Profile (GET https://api.spotify.com/v1/me)
+                val profileRequest = Request.Builder()
+                    .url("https://api.spotify.com/v1/me")
+                    .header("Authorization", "Bearer $token")
+                    .header("Accept", "application/json")
+                    .build()
+
+                val profileResponse = withContext(Dispatchers.IO) {
+                    httpClient.newCall(profileRequest).execute()
+                }
+
+                if (profileResponse.isSuccessful) {
+                    val bodyStr = profileResponse.body?.string() ?: "{}"
+                    val json = JSONObject(bodyStr)
+                    val id = json.optString("id", "spotify_${System.currentTimeMillis()}")
+                    val displayName = json.optString("display_name", "Usuario Spotify")
+                    val email = json.optString("email", "conectado@spotify.com")
+                    val product = json.optString("product", "premium").replaceFirstChar { it.uppercase() }
+
+                    val authenticatedUser = SpotifyUser(
+                        id = id,
+                        username = id,
+                        displayName = displayName,
+                        email = email,
+                        plan = "Spotify $product",
+                        isConnected = true
+                    )
+
+                    _currentUser.value = authenticatedUser
+                    _accounts.update { list ->
+                        listOf(authenticatedUser) + list.filter { it.id != id }.map { it.copy(isConnected = false) }
+                    }
+
+                    // 2. Fetch User's Liked Songs (GET https://api.spotify.com/v1/me/tracks?limit=30)
+                    val tracksRequest = Request.Builder()
+                        .url("https://api.spotify.com/v1/me/tracks?limit=30")
+                        .header("Authorization", "Bearer $token")
+                        .header("Accept", "application/json")
+                        .build()
+
+                    val tracksResponse = withContext(Dispatchers.IO) {
+                        httpClient.newCall(tracksRequest).execute()
+                    }
+
+                    if (tracksResponse.isSuccessful) {
+                        val tracksBody = tracksResponse.body?.string() ?: "{}"
+                        val tracksJson = JSONObject(tracksBody)
+                        val items = tracksJson.optJSONArray("items")
+
+                        if (items != null && items.length() > 0) {
+                            val parsedTracks = mutableListOf<SpotifyTrack>()
+                            for (i in 0 until items.length()) {
+                                val item = items.getJSONObject(i)
+                                val trackObj = item.optJSONObject("track") ?: continue
+                                val trackId = trackObj.optString("id", "track_$i")
+                                val title = trackObj.optString("name", "Pista $i")
+                                val durationMs = trackObj.optLong("duration_ms", 180000L)
+                                val albumObj = trackObj.optJSONObject("album")
+                                val albumName = albumObj?.optString("name") ?: "Álbum"
+
+                                val artistsArr = trackObj.optJSONArray("artists")
+                                val artistName = if (artistsArr != null && artistsArr.length() > 0) {
+                                    artistsArr.getJSONObject(0).optString("name", "Artista")
+                                } else "Artista"
+
+                                val colors = listOf("#1DB954", "#E11D48", "#2563EB", "#7928CA", "#EA580C", "#16A34A")
+                                val color = colors[i % colors.size]
+
+                                parsedTracks.add(
+                                    SpotifyTrack(
+                                        id = trackId,
+                                        title = title,
+                                        artist = artistName,
+                                        album = albumName,
+                                        durationSeconds = (durationMs / 1000).toInt(),
+                                        isLiked = true,
+                                        albumCoverColorHex = color,
+                                        genre = "Spotify Liked"
+                                    )
+                                )
+                            }
+                            if (parsedTracks.isNotEmpty()) {
+                                _likedTracks.value = parsedTracks
+                                _playbackState.update { it.copy(currentTrack = parsedTracks[0]) }
+                            }
+                        }
+                    }
+                } else {
+                    _lastAuthError.value = "Error al autenticar: ${profileResponse.code} ${profileResponse.message}"
+                }
+            } catch (e: Exception) {
+                _lastAuthError.value = "Error de red: ${e.message}"
+            } finally {
+                _isAuthenticating.value = false
+            }
+        }
+    }
 
     fun playTrack(track: SpotifyTrack) {
         _playbackState.update {
@@ -146,7 +324,6 @@ class SpotifyMusicService(private val context: Context) {
                 } else track
             }
         }
-        // Update current track liked state if matching
         if (_playbackState.value.currentTrack.id == trackId) {
             _playbackState.update {
                 it.copy(currentTrack = it.currentTrack.copy(isLiked = !it.currentTrack.isLiked))
@@ -162,9 +339,6 @@ class SpotifyMusicService(private val context: Context) {
         _playbackState.update { it.copy(isRepeat = !it.isRepeat) }
     }
 
-    // -------------------------------------------------------------
-    // Account Management (CRUD / Login / Switch)
-    // -------------------------------------------------------------
     fun switchAccount(userId: String) {
         val found = _accounts.value.find { it.id == userId } ?: return
         _accounts.update { list ->
@@ -173,16 +347,7 @@ class SpotifyMusicService(private val context: Context) {
         _currentUser.value = found.copy(isConnected = true)
     }
 
-    fun login(usernameOrEmail: String, plan: String = "Spotify Premium"): SpotifyUser {
-        val existing = _accounts.value.find {
-            it.username.equals(usernameOrEmail, ignoreCase = true) ||
-                    it.email.equals(usernameOrEmail, ignoreCase = true)
-        }
-        if (existing != null) {
-            switchAccount(existing.id)
-            return existing
-        }
-
+    fun loginManual(usernameOrEmail: String, plan: String = "Spotify Premium"): SpotifyUser {
         val cleanName = usernameOrEmail.substringBefore("@").replace(".", " ").capitalize()
         val newUser = SpotifyUser(
             id = "user_${System.currentTimeMillis()}",
@@ -204,13 +369,11 @@ class SpotifyMusicService(private val context: Context) {
         _accounts.update { list ->
             list.map { it.copy(isConnected = false) }
         }
+        _accessToken.value = null
         _playbackState.update { it.copy(isPlaying = false) }
         playbackTickerJob?.cancel()
     }
 
-    // -------------------------------------------------------------
-    // Playback Timing Ticker
-    // -------------------------------------------------------------
     private fun startPlaybackTicker() {
         playbackTickerJob?.cancel()
         playbackTickerJob = serviceScope.launch {
@@ -231,9 +394,6 @@ class SpotifyMusicService(private val context: Context) {
         }
     }
 
-    // -------------------------------------------------------------
-    // Audible synthesizer chime so music play produces actual sound
-    // -------------------------------------------------------------
     private fun playAudioChime() {
         audioToneJob?.cancel()
         audioToneJob = serviceScope.launch(Dispatchers.IO) {
@@ -241,7 +401,7 @@ class SpotifyMusicService(private val context: Context) {
                 val sampleRate = 22050
                 val numSamples = (sampleRate * 0.15).toInt()
                 val buffer = ShortArray(numSamples)
-                val freq = 440.0 // A4 note
+                val freq = 440.0
 
                 for (i in 0 until numSamples) {
                     val angle = 2.0 * Math.PI * i / (sampleRate / freq)
@@ -272,9 +432,7 @@ class SpotifyMusicService(private val context: Context) {
                 delay(200L)
                 audioTrack.stop()
                 audioTrack.release()
-            } catch (_: Exception) {
-                // Audio output handled gracefully if muted or in background
-            }
+            } catch (_: Exception) {}
         }
     }
 }
