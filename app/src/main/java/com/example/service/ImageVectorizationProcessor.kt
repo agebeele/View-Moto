@@ -10,6 +10,8 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.net.Uri
 import com.example.model.BikeGraphicStyle
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.abs
@@ -65,13 +67,11 @@ class ImageVectorizationProcessor(private val context: Context) {
             sourceBitmap.compress(Bitmap.CompressFormat.PNG, 95, byteStream)
             val imageBytes = byteStream.toByteArray()
 
+            val mediaType = "image/png".toMediaTypeOrNull()
+            val body = imageBytes.toRequestBody(mediaType)
             val requestBody = okhttp3.MultipartBody.Builder()
                 .setType(okhttp3.MultipartBody.FORM)
-                .addFormDataPart(
-                    "image_file",
-                    "motorcycle.png",
-                    okhttp3.RequestBody.create(okhttp3.MediaType.parse("image/png"), imageBytes)
-                )
+                .addFormDataPart("image_file", "motorcycle.png", body)
                 .addFormDataPart("size", "auto")
                 .build()
 

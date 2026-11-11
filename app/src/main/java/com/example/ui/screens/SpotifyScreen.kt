@@ -101,8 +101,6 @@ fun SpotifyScreen(
     modifier: Modifier = Modifier
 ) {
     var showAccountDialog by remember { mutableStateOf(false) }
-    var loginUsernameInput by remember { mutableStateOf("") }
-    var loginPlanInput by remember { mutableStateOf("Spotify Premium") }
 
     Column(
         modifier = modifier
@@ -264,14 +262,18 @@ fun SpotifyScreen(
                                         letterSpacing = 1.sp
                                     )
                                     Text(
-                                        text = "Tus me gusta",
+                                        text = if (currentUser.isConnected) "Tus me gusta" else "Conectar con Spotify",
                                         fontSize = 24.sp,
                                         fontWeight = FontWeight.Black,
                                         color = HighContrastWhite
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "${likedTracks.size} canciones descargadas · Modo MotoDash",
+                                        text = if (currentUser.isConnected) {
+                                            "${likedTracks.size} canciones de tu cuenta oficial · Modo MotoDash"
+                                        } else {
+                                            "Inicia sesión para sincronizar tus listas y me gusta"
+                                        },
                                         fontSize = 12.sp,
                                         color = TextSecondary
                                     )
@@ -280,49 +282,70 @@ fun SpotifyScreen(
 
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            // Play & Shuffle Action Buttons
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
+                            if (!currentUser.isConnected) {
+                                // Web OAuth Login CTA button
                                 Button(
-                                    onClick = {
-                                        if (likedTracks.isNotEmpty()) {
-                                            if (playbackState.isPlaying) {
-                                                onTogglePlayPause()
-                                            } else {
-                                                onPlayTrack(likedTracks.first())
-                                            }
-                                        }
-                                    },
+                                    onClick = onLoginWithWeb,
                                     colors = ButtonDefaults.buttonColors(containerColor = SpotifyGreen),
-                                    shape = RoundedCornerShape(24.dp),
+                                    shape = RoundedCornerShape(16.dp),
                                     modifier = Modifier
-                                        .weight(1f)
-                                        .height(48.dp)
-                                        .testTag("spotify_play_all_button")
+                                        .fillMaxWidth()
+                                        .height(50.dp)
+                                        .testTag("spotify_login_hero_button")
                                 ) {
-                                    Icon(
-                                        imageVector = if (playbackState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                        contentDescription = null,
-                                        tint = Color.Black
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(imageVector = Icons.Default.Login, contentDescription = null, tint = Color.Black)
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = if (playbackState.isPlaying) "Pausar" else "Reproducir Todo",
-                                        fontWeight = FontWeight.Bold,
+                                        text = "Iniciar Sesión en Spotify (Web Oficial)",
                                         color = Color.Black,
+                                        fontWeight = FontWeight.Black,
                                         fontSize = 14.sp
                                     )
                                 }
+                            } else {
+                                // Play & Shuffle Action Buttons
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            if (likedTracks.isNotEmpty()) {
+                                                if (playbackState.isPlaying) {
+                                                    onTogglePlayPause()
+                                                } else {
+                                                    onPlayTrack(likedTracks.first())
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = SpotifyGreen),
+                                        shape = RoundedCornerShape(24.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp)
+                                            .testTag("spotify_play_all_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = if (playbackState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                            contentDescription = null,
+                                            tint = Color.Black
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (playbackState.isPlaying) "Pausar" else "Reproducir Todo",
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.Black,
+                                            fontSize = 14.sp
+                                        )
+                                    }
 
-                                IconButton(
-                                    onClick = onToggleShuffle,
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(CircleShape)
-                                        .background(if (playbackState.isShuffle) SpotifyGreen.copy(alpha = 0.2f) else SpotifyDarkSurface)
+                                    IconButton(
+                                        onClick = onToggleShuffle,
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .clip(CircleShape)
+                                            .background(if (playbackState.isShuffle) SpotifyGreen.copy(alpha = 0.2f) else SpotifyDarkSurface)
                                         .border(1.dp, if (playbackState.isShuffle) SpotifyGreen else CockpitCardBorder, CircleShape)
                                         .testTag("spotify_shuffle_toggle")
                                 ) {
@@ -353,8 +376,9 @@ fun SpotifyScreen(
                     }
                 }
             }
+        }
 
-            item {
+        item {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "Canciones en tu biblioteca",
@@ -600,163 +624,127 @@ fun SpotifyScreen(
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "Cambiar de cuenta activa para reproducir tus playlists y me gusta:",
-                        fontSize = 12.sp,
-                        color = TextSecondary
-                    )
+                    if (currentUser.isConnected) {
+                        Text(
+                            text = "Cuenta de Spotify vinculada:",
+                            fontSize = 12.sp,
+                            color = TextSecondary
+                        )
 
-                    // List of registered accounts
-                    accounts.forEach { user ->
-                        val isCurrent = user.id == currentUser.id
                         Surface(
-                            color = if (isCurrent) Color(0xFF1E2822) else SpotifyDarkSurface,
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (isCurrent) SpotifyGreen else CockpitCardBorder
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onSwitchAccount(user.id)
-                                    showAccountDialog = false
-                                }
+                            color = Color(0xFF1E2822),
+                            shape = RoundedCornerShape(14.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.5.dp, SpotifyGreen),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                modifier = Modifier.padding(12.dp),
+                                modifier = Modifier.padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(
                                         modifier = Modifier
-                                            .size(32.dp)
+                                            .size(38.dp)
                                             .clip(CircleShape)
-                                            .background(if (isCurrent) SpotifyGreen else Color.DarkGray),
+                                            .background(SpotifyGreen),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = user.displayName.take(1).uppercase(),
-                                            fontWeight = FontWeight.Bold,
+                                            text = currentUser.displayName.take(1).uppercase(),
+                                            fontWeight = FontWeight.Black,
                                             color = Color.Black
                                         )
                                     }
-                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Column {
                                         Text(
-                                            text = user.displayName,
-                                            fontWeight = FontWeight.Bold,
+                                            text = currentUser.displayName,
+                                            fontWeight = FontWeight.Black,
                                             color = HighContrastWhite,
-                                            fontSize = 13.sp
+                                            fontSize = 14.sp
                                         )
                                         Text(
-                                            text = "${user.email} · ${user.plan}",
+                                            text = "${currentUser.email} · ${currentUser.plan}",
                                             color = TextSecondary,
-                                            fontSize = 10.sp
+                                            fontSize = 11.sp
                                         )
                                     }
                                 }
 
-                                if (isCurrent) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "Activa",
-                                        tint = SpotifyGreen,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                } else {
-                                    Text(
-                                        text = "Usar",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = SpotifyGreen
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Activa",
+                                    tint = SpotifyGreen,
+                                    modifier = Modifier.size(24.dp)
+                                )
                             }
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Primary: Official Web Authorization flow via accounts.spotify.com
-                    Button(
-                        onClick = {
-                            onLoginWithWeb()
-                            showAccountDialog = false
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = SpotifyGreen),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("spotify_web_login_button")
-                    ) {
-                        Icon(imageVector = Icons.Default.Login, contentDescription = null, tint = Color.Black)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Iniciar Sesión Oficial (Web Spotify)",
-                            color = Color.Black,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 13.sp
-                        )
-                    }
-
-                    Text(
-                        text = "Abre accounts.spotify.com para autorizar y sincronizar tu perfil real y canciones de 'Tus Me Gusta' mediante la API de Spotify.",
-                        fontSize = 10.sp,
-                        color = TextSecondary,
-                        lineHeight = 14.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "O ingresa con usuario rápido:",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = HighContrastWhite
-                    )
-
-                    OutlinedTextField(
-                        value = loginUsernameInput,
-                        onValueChange = { loginUsernameInput = it },
-                        placeholder = { Text("Usuario o correo Spotify", color = Color.Gray) },
-                        shape = RoundedCornerShape(10.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = SpotifyGreen,
-                            unfocusedBorderColor = CockpitCardBorder,
-                            focusedTextColor = HighContrastWhite,
-                            unfocusedTextColor = HighContrastWhite
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Button(
-                        onClick = {
-                            if (loginUsernameInput.isNotBlank()) {
-                                onLogin(loginUsernameInput.trim(), loginPlanInput)
-                                loginUsernameInput = ""
+                        Button(
+                            onClick = {
+                                onLoginWithWeb()
                                 showAccountDialog = false
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = CockpitCardBorder),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Acceso Rápido Local", color = HighContrastWhite, fontWeight = FontWeight.Bold)
-                    }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = CockpitCardBorder),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(imageVector = Icons.Default.SwapHoriz, contentDescription = null, tint = HighContrastWhite)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Cambiar de Cuenta (Web Oficial)", color = HighContrastWhite, fontWeight = FontWeight.Bold)
+                        }
 
-                    TextButton(
-                        onClick = {
-                            onLogout()
-                            showAccountDialog = false
-                        },
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    ) {
-                        Icon(imageVector = Icons.Default.Logout, contentDescription = null, tint = Color(0xFFFF5252), modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Cerrar Sesión Activa", color = Color(0xFFFF5252), fontSize = 12.sp)
+                        TextButton(
+                            onClick = {
+                                onLogout()
+                                showAccountDialog = false
+                            },
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        ) {
+                            Icon(imageVector = Icons.Default.Logout, contentDescription = null, tint = Color(0xFFFF5252), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Cerrar Sesión de Spotify", color = Color(0xFFFF5252), fontSize = 12.sp)
+                        }
+                    } else {
+                        Text(
+                            text = "No has iniciado sesión en Spotify. Conéctate para escuchar tus canciones de 'Tus Me Gusta' con los controles del tablero:",
+                            fontSize = 12.sp,
+                            color = TextSecondary,
+                            lineHeight = 16.sp
+                        )
+
+                        // Primary Web OAuth Login Button
+                        Button(
+                            onClick = {
+                                onLoginWithWeb()
+                                showAccountDialog = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SpotifyGreen),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .testTag("spotify_dialog_login_button")
+                        ) {
+                            Icon(imageVector = Icons.Default.Login, contentDescription = null, tint = Color.Black)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Iniciar Sesión Oficial (Web Spotify)",
+                                color = Color.Black,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 13.sp
+                            )
+                        }
+
+                        Text(
+                            text = "Te redireccionará a accounts.spotify.com para autorizar y obtener tu token de acceso seguro.",
+                            fontSize = 11.sp,
+                            color = TextSecondary,
+                            lineHeight = 14.sp
+                        )
                     }
                 }
             },

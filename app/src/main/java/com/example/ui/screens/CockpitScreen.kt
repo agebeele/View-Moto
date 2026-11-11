@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Emergency
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Mic
@@ -101,14 +102,14 @@ fun CockpitScreen(
         ) {
             Column {
                 Text(
-                    text = "Mi ${profile.brandModel.substringAfterLast(" ", "300Z")}",
+                    text = if (profile.brandModel.contains("RT", ignoreCase = true)) "Mi RT 250 SPORT" else "Mi ${profile.brandModel.substringAfterLast(" ", "300Z")}",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Black,
                     color = HighContrastWhite,
                     letterSpacing = (-0.5).sp
                 )
                 Text(
-                    text = "${profile.brandModel.substringBefore(" ", "ITALIKA")} · COMPUTADORA DE VIAJE",
+                    text = "${profile.brandModel} · COMPUTADORA DE VIAJE",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -160,7 +161,7 @@ fun CockpitScreen(
                 .border(1.dp, CockpitCardBorder, RoundedCornerShape(20.dp))
                 .padding(8.dp)
         ) {
-            // Bike Image: Custom processed bitmap or bundled transparent 300Z PNG
+            // Bike Image: Custom processed bitmap or bundled transparent RT 250 / 300Z PNG
             if (customBikeBitmap != null) {
                 Image(
                     bitmap = customBikeBitmap.asImageBitmap(),
@@ -169,9 +170,14 @@ fun CockpitScreen(
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
+                val bikeDrawable = if (profile.brandModel.contains("RT", ignoreCase = true)) {
+                    R.drawable.moto_rt250_sport
+                } else {
+                    R.drawable.moto_300z_transparent
+                }
                 Image(
-                    painter = painterResource(id = R.drawable.moto_300z_transparent),
-                    contentDescription = "Italika 300Z La Chucha",
+                    painter = painterResource(id = bikeDrawable),
+                    contentDescription = "${profile.nickname} ${profile.brandModel}",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize()
                 )

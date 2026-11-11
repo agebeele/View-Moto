@@ -293,9 +293,14 @@ fun BikeCustomizationScreen(
                                 modifier = Modifier.fillMaxSize()
                             )
                         } else {
+                            val bikeDrawable = if (profile.brandModel.contains("RT", ignoreCase = true)) {
+                                R.drawable.moto_rt250_sport
+                            } else {
+                                R.drawable.moto_300z_transparent
+                            }
                             Image(
-                                painter = painterResource(id = R.drawable.moto_300z_transparent),
-                                contentDescription = "Moto Italika 300Z Transparente",
+                                painter = painterResource(id = bikeDrawable),
+                                contentDescription = "${profile.nickname} ${profile.brandModel}",
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier.fillMaxSize()
                             )

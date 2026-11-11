@@ -25,10 +25,21 @@ class MotoRepository {
 
     private val initialGarage = listOf(
         MotoProfile(
+            id = "moto_rt250",
+            nickname = "RUTH",
+            brandModel = "RT250 SPORT",
+            plateNumber = "94MZB1",
+            currentOdometerKm = 1250.0,
+            targetTirePressureFrontPsi = 29.0,
+            targetTirePressureRearPsi = 33.0,
+            themeMode = VisualThemeMode.CYBER_CYAN,
+            graphicStyle = BikeGraphicStyle.TRANSPARENT_STUDIO_PNG
+        ),
+        MotoProfile(
             id = "moto_300z",
             nickname = "LA CHUCHA",
             brandModel = "ITALIKA 300Z",
-            plateNumber = "94MZB1",
+            plateNumber = "88KLA2",
             currentOdometerKm = 3954.8,
             targetTirePressureFrontPsi = 29.0,
             targetTirePressureRearPsi = 33.0,
@@ -44,17 +55,6 @@ class MotoRepository {
             targetTirePressureFrontPsi = 29.0,
             targetTirePressureRearPsi = 36.0,
             themeMode = VisualThemeMode.CYBER_CYAN,
-            graphicStyle = BikeGraphicStyle.TRANSPARENT_STUDIO_PNG
-        ),
-        MotoProfile(
-            id = "moto_duke",
-            nickname = "LA BESTIA",
-            brandModel = "KTM 390 DUKE",
-            plateNumber = "31BVF9",
-            currentOdometerKm = 6800.0,
-            targetTirePressureFrontPsi = 29.0,
-            targetTirePressureRearPsi = 32.0,
-            themeMode = VisualThemeMode.RACING_ORANGE,
             graphicStyle = BikeGraphicStyle.TRANSPARENT_STUDIO_PNG
         )
     )

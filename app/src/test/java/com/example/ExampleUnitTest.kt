@@ -15,9 +15,9 @@ class ExampleUnitTest {
     fun defaultProfile_isCorrect() {
         val repo = MotoRepository()
         val profile = repo.profile.value
-        assertEquals("LA CHUCHA", profile.nickname)
-        assertEquals("ITALIKA 300Z", profile.brandModel)
-        assertEquals(3954.8, profile.currentOdometerKm, 0.01)
+        assertEquals("RUTH", profile.nickname)
+        assertEquals("RT250 SPORT", profile.brandModel)
+        assertEquals(1250.0, profile.currentOdometerKm, 0.01)
     }
 
     @Test

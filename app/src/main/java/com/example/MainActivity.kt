@@ -60,9 +60,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent?.data?.let { handleDeepLink(it) }
+        intent.data?.let { handleDeepLink(it) }
     }
 
     private fun handleDeepLink(uri: Uri) {
@@ -166,7 +166,8 @@ fun MainAppContent(viewModel: MotoDashboardViewModel) {
                     onNextTrack = { viewModel.nextMediaTrack() },
                     onSimulateTpmsWarning = { viewModel.triggerSimulatedTpmsWarning() },
                     onResetTpms = { viewModel.resetTpmsToNormal() },
-                    onOpenSpotify = { viewModel.setSpotifyScreenVisible(true) }
+                    onOpenSpotify = { viewModel.setSpotifyScreenVisible(true) },
+                    onOpenBikeSelector = { viewModel.setBikeSelectorVisible(true) }
                 )
                 1 -> TripsScreen(
                     tripHistory = tripHistory
@@ -198,9 +199,13 @@ fun MainAppContent(viewModel: MotoDashboardViewModel) {
                     profile = profile,
                     emergencyContacts = emergencyContacts,
                     customBikeBitmap = customBikeBitmap,
+                    garageList = garage,
+                    imageProcessor = viewModel.imageProcessor,
                     onThemeSelect = { viewModel.updateTheme(it) },
                     onUpdateBikeDetails = { nick, model, style -> viewModel.updateBikeDetails(nick, model, style) },
                     onProcessCustomImage = { uri, style -> viewModel.processCustomMotorcycleImage(uri, style) },
+                    onSaveCutoutBitmap = { viewModel.saveProcessedCutoutBitmap(it) },
+                    onOpenBikeSelector = { viewModel.setBikeSelectorVisible(true) },
                     onExportPdf = { viewModel.exportMaintenancePdfReport() },
                     onOpenEmergencyDialog = { viewModel.setEmergencyDialogVisible(true) },
                     onOpenSpotify = { viewModel.setSpotifyScreenVisible(true) }
@@ -224,11 +229,26 @@ fun MainAppContent(viewModel: MotoDashboardViewModel) {
                     onToggleRepeat = { viewModel.toggleSpotifyRepeat() },
                     onSwitchAccount = { viewModel.switchSpotifyAccount(it) },
                     onLogin = { user, plan -> viewModel.loginSpotify(user, plan) },
+                    onLoginWithWeb = { viewModel.openSpotifyLoginInBrowser() },
                     onLogout = { viewModel.logoutSpotify() },
                     onBack = { viewModel.setSpotifyScreenVisible(false) }
                 )
             }
         }
+    }
+
+    // Bike Selector / Garage Dialog
+    if (showBikeSelectorDialog) {
+        BikeSelectorDialog(
+            currentProfile = profile,
+            garageList = garage,
+            onSelectBike = { viewModel.switchActiveMotorcycle(it) },
+            onAddNewBike = { nick, model, plate, odo, theme ->
+                viewModel.addMotorcycleToGarage(nick, model, plate, odo, theme)
+            },
+            onDeleteBike = { viewModel.deleteMotorcycleFromGarage(it) },
+            onDismiss = { viewModel.setBikeSelectorVisible(false) }
+        )
     }
 
     // Voice Command Modal

@@ -52,62 +52,41 @@ class SpotifyMusicService(private val context: Context) {
     private val _accessToken = MutableStateFlow<String?>(null)
     val accessToken: StateFlow<String?> = _accessToken.asStateFlow()
 
-    // Saved accounts to switch easily
-    private val defaultAccounts = listOf(
-        SpotifyUser(
-            id = "user_01",
-            username = "rider_300z",
-            displayName = "Rider 300Z",
-            email = "rider@motodash.app",
-            plan = "Spotify Premium",
-            isConnected = true
-        ),
-        SpotifyUser(
-            id = "user_02",
-            username = "motoclub_asfalto",
-            displayName = "MotoClub Asfalto",
-            email = "asfalto@motoclub.mx",
-            plan = "Spotify Duo",
-            isConnected = false
-        ),
-        SpotifyUser(
-            id = "user_03",
-            username = "piloto_nocturno",
-            displayName = "Piloto Nocturno",
-            email = "nocturno@speed.io",
-            plan = "Spotify Premium",
-            isConnected = false
-        )
+    // No dummy accounts: strictly authenticated via Spotify Web API
+    private val unlinkedUser = SpotifyUser(
+        id = "unlinked",
+        username = "",
+        displayName = "Sin cuenta vinculada",
+        email = "Inicia sesión con la API de Spotify",
+        plan = "No conectado",
+        isConnected = false
     )
 
-    private val _accounts = MutableStateFlow(defaultAccounts)
+    private val _accounts = MutableStateFlow<List<SpotifyUser>>(emptyList())
     val accounts: StateFlow<List<SpotifyUser>> = _accounts.asStateFlow()
 
-    private val _currentUser = MutableStateFlow(defaultAccounts[0])
+    private val _currentUser = MutableStateFlow(unlinkedUser)
     val currentUser: StateFlow<SpotifyUser> = _currentUser.asStateFlow()
 
-    // "Tus me gusta" (Liked Songs)
-    private val defaultLikedTracks = listOf(
-        SpotifyTrack("sp_1", "Midnight City", "M83", "Hurry Up, We're Dreaming", 243, isLiked = true, albumCoverColorHex = "#7928CA", genre = "Synthwave"),
-        SpotifyTrack("sp_2", "Blinding Lights", "The Weeknd", "After Hours", 200, isLiked = true, albumCoverColorHex = "#E11D48", genre = "Electro Pop"),
-        SpotifyTrack("sp_3", "Born to be Wild", "Steppenwolf", "Steppenwolf", 210, isLiked = true, albumCoverColorHex = "#D97706", genre = "Classic Rock"),
-        SpotifyTrack("sp_4", "Highway to Hell", "AC/DC", "Highway to Hell", 208, isLiked = true, albumCoverColorHex = "#DC2626", genre = "Hard Rock"),
-        SpotifyTrack("sp_5", "Nightcall", "Kavinsky", "OutRun", 259, isLiked = true, albumCoverColorHex = "#2563EB", genre = "Synthwave"),
-        SpotifyTrack("sp_6", "Kickstart My Heart", "Mötley Crüe", "Dr. Feelgood", 282, isLiked = true, albumCoverColorHex = "#EA580C", genre = "Metal"),
-        SpotifyTrack("sp_7", "The Trooper", "Iron Maiden", "Piece of Mind", 251, isLiked = true, albumCoverColorHex = "#16A34A", genre = "Heavy Metal"),
-        SpotifyTrack("sp_8", "Acelerando el Motor", "MotoDash Riders", "Pista 300Z", 195, isLiked = true, albumCoverColorHex = "#FF007F", genre = "Motorcycle Beats"),
-        SpotifyTrack("sp_9", "Radar Love", "Golden Earring", "Moontan", 384, isLiked = true, albumCoverColorHex = "#0D9488", genre = "Road Rock"),
-        SpotifyTrack("sp_10", "Ride the Lightning", "Metallica", "Ride the Lightning", 396, isLiked = true, albumCoverColorHex = "#3B82F6", genre = "Thrash Metal")
+    private val placeholderTrack = SpotifyTrack(
+        id = "sp_welcome",
+        title = "Conecta tu Spotify",
+        artist = "Presiona 'Iniciar sesión en Spotify'",
+        album = "Spotify Web API",
+        durationSeconds = 180,
+        isLiked = false,
+        albumCoverColorHex = "#1DB954",
+        genre = "Spotify Web"
     )
 
-    private val _likedTracks = MutableStateFlow(defaultLikedTracks)
+    private val _likedTracks = MutableStateFlow<List<SpotifyTrack>>(emptyList())
     val likedTracks: StateFlow<List<SpotifyTrack>> = _likedTracks.asStateFlow()
 
     private val _playbackState = MutableStateFlow(
         SpotifyPlaybackState(
-            currentTrack = defaultLikedTracks[0],
+            currentTrack = placeholderTrack,
             isPlaying = false,
-            positionSeconds = 45,
+            positionSeconds = 0,
             isShuffle = false,
             isRepeat = false
         )
@@ -347,8 +326,13 @@ class SpotifyMusicService(private val context: Context) {
         _currentUser.value = found.copy(isConnected = true)
     }
 
+    fun login(usernameOrEmail: String = "", plan: String = "Spotify Premium"): SpotifyUser {
+        openSpotifyLoginInBrowser()
+        return _currentUser.value
+    }
+
     fun loginManual(usernameOrEmail: String, plan: String = "Spotify Premium"): SpotifyUser {
-        val cleanName = usernameOrEmail.substringBefore("@").replace(".", " ").capitalize()
+        val cleanName = usernameOrEmail.substringBefore("@").replace(".", " ").replaceFirstChar { it.uppercase() }
         val newUser = SpotifyUser(
             id = "user_${System.currentTimeMillis()}",
             username = usernameOrEmail.substringBefore("@").lowercase(),
