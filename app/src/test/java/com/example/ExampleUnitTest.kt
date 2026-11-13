@@ -71,4 +71,29 @@ class ExampleUnitTest {
         assertFalse(repo.activeTrip.value.isRiding)
         assertEquals(beforeCount + 1, repo.tripHistory.value.size)
     }
+
+    @Test
+    fun emergencyContacts_supportsAddUpdateAndDelete() {
+        val repo = MotoRepository()
+        val initialCount = repo.emergencyContacts.value.size
+
+        val added = com.example.model.EmergencyContact(
+            id = "em_test_1",
+            name = "Luis Mecánico",
+            phone = "5544332211",
+            relationship = "Auxilio Vial",
+            isPrimary = false
+        )
+        repo.addEmergencyContact(added)
+        assertEquals(initialCount + 1, repo.emergencyContacts.value.size)
+
+        repo.updateEmergencyContact(added.copy(name = "Luis Taller", phone = "5599887766", isPrimary = true))
+        val updated = repo.emergencyContacts.value.first { it.id == "em_test_1" }
+        assertEquals("Luis Taller", updated.name)
+        assertEquals("5599887766", updated.phone)
+        assertTrue(updated.isPrimary)
+
+        repo.deleteEmergencyContact("em_test_1")
+        assertEquals(initialCount, repo.emergencyContacts.value.size)
+    }
 }

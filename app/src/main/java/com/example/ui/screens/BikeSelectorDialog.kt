@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -78,6 +79,10 @@ fun BikeSelectorDialog(
 ) {
     val accentColor = MaterialTheme.colorScheme.primary
     var isAddingBike by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = isAddingBike) {
+        isAddingBike = false
+    }
 
     // Form inputs for new bike
     var newNickname by remember { mutableStateOf("") }

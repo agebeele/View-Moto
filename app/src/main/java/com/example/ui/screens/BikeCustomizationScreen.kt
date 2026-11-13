@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ColorLens
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Emergency
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Headphones
@@ -626,24 +627,57 @@ fun BikeCustomizationScreen(
                             )
                         }
 
-                        Text(
-                            text = "MANOS LIBRES",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AlertRed
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onOpenEmergencyDialog() }
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                                .testTag("edit_emergency_contacts_header_link")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Editar contactos",
+                                tint = accentColor,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Editar",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = accentColor
+                            )
+                        }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Toca para editar contactos de emergencia >",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = accentColor,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { onOpenEmergencyDialog() }
+                            .padding(vertical = 4.dp)
+                            .testTag("edit_emergency_contacts_text")
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     emergencyContacts.forEach { contact ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onOpenEmergencyDialog() }
+                                .padding(vertical = 6.dp, horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(contact.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = HighContrastWhite)
                                 Text(contact.relationship, fontSize = 11.sp, color = Color.Gray)
                             }
@@ -659,7 +693,7 @@ fun BikeCustomizationScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = AlertRed),
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
-                        Text("Abrir Panel SOS / Llamada Rápida", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Editar / Llamar Contactos SOS", fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }

@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -101,6 +102,10 @@ fun SpotifyScreen(
     modifier: Modifier = Modifier
 ) {
     var showAccountDialog by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = !showAccountDialog) {
+        onBack()
+    }
 
     Column(
         modifier = modifier

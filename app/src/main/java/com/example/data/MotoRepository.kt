@@ -627,19 +627,27 @@ class MotoRepository {
         }
     }
 
+    private fun evaluateTireStatus(psi: Double, isFront: Boolean): TireStatus {
+        return if (isFront) {
+            when {
+                psi < 24.0 -> TireStatus.CRITICAL_LOW
+                psi < 27.0 -> TireStatus.WARNING_LOW
+                psi > 36.0 -> TireStatus.WARNING_HIGH
+                else -> TireStatus.NORMAL
+            }
+        } else {
+            when {
+                psi < 26.0 -> TireStatus.CRITICAL_LOW
+                psi < 30.0 -> TireStatus.WARNING_LOW
+                psi > 40.0 -> TireStatus.WARNING_HIGH
+                else -> TireStatus.NORMAL
+            }
+        }
+    }
+
     fun updateTpmsPressure(frontPsi: Double, rearPsi: Double) {
-        val frontStatus = when {
-            frontPsi < 24.0 -> TireStatus.CRITICAL_LOW
-            frontPsi < 27.0 -> TireStatus.WARNING_LOW
-            frontPsi > 36.0 -> TireStatus.WARNING_HIGH
-            else -> TireStatus.NORMAL
-        }
-        val rearStatus = when {
-            rearPsi < 26.0 -> TireStatus.CRITICAL_LOW
-            rearPsi < 30.0 -> TireStatus.WARNING_LOW
-            rearPsi > 40.0 -> TireStatus.WARNING_HIGH
-            else -> TireStatus.NORMAL
-        }
+        val frontStatus = evaluateTireStatus(frontPsi, isFront = true)
+        val rearStatus = evaluateTireStatus(rearPsi, isFront = false)
         _tpms.update {
             it.copy(
                 frontTire = it.frontTire.copy(pressurePsi = frontPsi, status = frontStatus),

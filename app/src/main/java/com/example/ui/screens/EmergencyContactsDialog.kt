@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,13 +13,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
@@ -202,22 +203,42 @@ fun EmergencyContactsDialog(
                     }
                 }
 
-                // List of Contacts with CRUD Actions
+                Text(
+                    text = "Toca un contacto o presiona \"Editar\" para cambiar nombre, teléfono o parentesco.",
+                    fontSize = 11.sp,
+                    color = TextSecondary,
+                    lineHeight = 15.sp
+                )
+
+                // Scrollable List of Contacts with CRUD Actions
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 260.dp)
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     contacts.forEach { contact ->
+                        val openEditor = {
+                            editingContact = contact
+                            formName = contact.name
+                            formPhone = contact.phone
+                            formRelation = contact.relationship
+                            formIsPrimary = contact.isPrimary
+                            isAddingNew = false
+                        }
                         Card(
                             shape = RoundedCornerShape(12.dp),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFF161822)),
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
                                 .border(
                                     1.dp,
                                     if (contact.isPrimary) AlertRed.copy(alpha = 0.8f) else CockpitCardBorder,
                                     RoundedCornerShape(12.dp)
                                 )
+                                .clickable { openEditor() }
                                 .testTag("contact_item_${contact.id}")
                         ) {
                             Row(
@@ -259,13 +280,25 @@ fun EmergencyContactsDialog(
                                         fontSize = 11.sp,
                                         color = TextSecondary
                                     )
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    Text(
+                                        text = "Toca para editar >",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AlertRed,
+                                        modifier = Modifier
+                                            .clickable { openEditor() }
+                                            .testTag("edit_contact_text_${contact.id}")
+                                    )
                                 }
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     // Direct Dial Button
                                     IconButton(
                                         onClick = { dialPhoneNumber(contact.phone) },
-                                        modifier = Modifier.size(34.dp)
+                                        modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Call,
@@ -277,15 +310,10 @@ fun EmergencyContactsDialog(
 
                                     // Edit Button
                                     IconButton(
-                                        onClick = {
-                                            editingContact = contact
-                                            formName = contact.name
-                                            formPhone = contact.phone
-                                            formRelation = contact.relationship
-                                            formIsPrimary = contact.isPrimary
-                                            isAddingNew = false
-                                        },
-                                        modifier = Modifier.size(34.dp)
+                                        onClick = { openEditor() },
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .testTag("edit_contact_icon_${contact.id}")
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Edit,
@@ -298,7 +326,7 @@ fun EmergencyContactsDialog(
                                     // Delete Button
                                     IconButton(
                                         onClick = { onDeleteContact(contact.id) },
-                                        modifier = Modifier.size(34.dp)
+                                        modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Delete,

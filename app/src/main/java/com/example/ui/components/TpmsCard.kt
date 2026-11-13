@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -73,7 +72,7 @@ fun TpmsSection(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "SENSORES TPMS EN TIEMPO REAL",
+                        text = "SENSORES TPMS",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -82,7 +81,7 @@ fun TpmsSection(
                 }
 
                 Text(
-                    text = if (tpmsData.isConnected) "BLE V2.4 CONECTADO" else "DESCONECTADO",
+                    text = if (tpmsData.isConnected) "CONECTADO" else "DESCONECTADO",
                     style = MaterialTheme.typography.labelSmall,
                     color = if (tpmsData.isConnected) SafeGreen else AlertRed,
                     fontWeight = FontWeight.Bold

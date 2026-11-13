@@ -59,4 +59,30 @@ class ExampleRobolectricTest {
         assertTrue(pdfFile!!.exists())
         assertTrue(pdfFile.length() > 0)
     }
+
+    @Test
+    fun `viewModel navigation back stack returns step by step to previous tabs`() {
+        val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val vm = com.example.ui.viewmodel.MotoDashboardViewModel(app)
+
+        assertEquals(0, vm.selectedTab.value)
+        assertEquals(false, vm.canNavigateBackTab.value)
+
+        vm.selectTab(1) // Viajes
+        vm.selectTab(3) // Gasolina
+        vm.selectTab(4) // Datos
+
+        assertEquals(4, vm.selectedTab.value)
+        assertTrue(vm.canNavigateBackTab.value)
+
+        assertTrue(vm.navigateBackTab())
+        assertEquals(3, vm.selectedTab.value)
+
+        assertTrue(vm.navigateBackTab())
+        assertEquals(1, vm.selectedTab.value)
+
+        assertTrue(vm.navigateBackTab())
+        assertEquals(0, vm.selectedTab.value)
+        assertEquals(false, vm.canNavigateBackTab.value)
+    }
 }

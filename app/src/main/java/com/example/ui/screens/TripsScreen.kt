@@ -1,5 +1,12 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -70,20 +77,37 @@ fun TripsScreen(
     var selectedTrip by remember { mutableStateOf<TripRecord?>(null) }
     val accentColor = MaterialTheme.colorScheme.primary
 
-    if (selectedTrip != null) {
-        TripDetailView(
-            trip = selectedTrip!!,
-            onBack = { selectedTrip = null },
-            accentColor = accentColor,
-            modifier = modifier
-        )
-    } else {
-        TripListView(
-            trips = tripHistory,
-            onSelectTrip = { selectedTrip = it },
-            accentColor = accentColor,
-            modifier = modifier
-        )
+    // Back gesture returns from TripDetailView to TripListView instead of leaving the tab/app
+    BackHandler(enabled = selectedTrip != null) {
+        selectedTrip = null
+    }
+
+    AnimatedContent(
+        targetState = selectedTrip,
+        transitionSpec = {
+            if (targetState != null) {
+                (slideInHorizontally { it / 3 } + fadeIn()) togetherWith (slideOutHorizontally { -it / 4 } + fadeOut())
+            } else {
+                (slideInHorizontally { -it / 3 } + fadeIn()) togetherWith (slideOutHorizontally { it / 4 } + fadeOut())
+            }
+        },
+        label = "trips_navigation_transition"
+    ) { currentTrip ->
+        if (currentTrip != null) {
+            TripDetailView(
+                trip = currentTrip,
+                onBack = { selectedTrip = null },
+                accentColor = accentColor,
+                modifier = modifier
+            )
+        } else {
+            TripListView(
+                trips = tripHistory,
+                onSelectTrip = { selectedTrip = it },
+                accentColor = accentColor,
+                modifier = modifier
+            )
+        }
     }
 }
 
@@ -255,6 +279,10 @@ fun TripDetailView(
         Spacer(modifier = Modifier.height(12.dp))
 
         var isMapFullscreen by remember { mutableStateOf(false) }
+
+        BackHandler(enabled = isMapFullscreen) {
+            isMapFullscreen = false
+        }
 
         // Real interactive map using MotoSpeed MapTileManager & LiveRouteMap
         val routePoints = trip.routePoints

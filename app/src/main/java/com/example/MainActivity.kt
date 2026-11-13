@@ -1,9 +1,12 @@
 package com.example
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -11,6 +14,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -20,9 +30,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import android.content.Intent
-import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 import com.example.ui.components.CarPlayNavBar
 import com.example.ui.screens.BikeCustomizationScreen
 import com.example.ui.screens.BikeSelectorDialog
@@ -75,7 +87,9 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MainAppContent(viewModel: MotoDashboardViewModel) {
+    val context = LocalContext.current
     val selectedTab by viewModel.selectedTab.collectAsState()
+    val canNavigateBackTab by viewModel.canNavigateBackTab.collectAsState()
     val profile by viewModel.profile.collectAsState()
     val garage by viewModel.garage.collectAsState()
     val showBikeSelectorDialog by viewModel.showBikeSelectorDialog.collectAsState()
@@ -122,28 +136,39 @@ fun MainAppContent(viewModel: MotoDashboardViewModel) {
         permissionsLauncher.launch(permissions.toTypedArray())
     }
 
-    // Hardware back button returns to Cockpit or dismisses Spotify screen
-    if (showSpotifyScreen) {
-        BackHandler {
-            viewModel.setSpotifyScreenVisible(false)
-        }
-    } else if (selectedTab != 0) {
-        BackHandler {
-            viewModel.selectTab(0)
+    // 1. In-App Tab History Back Stack: steps back to previous visited tab inside the app
+    val hasActiveOverlay = showSpotifyScreen || showBikeSelectorDialog || showVoiceDialog || showEmergencyDialog
+    BackHandler(enabled = canNavigateBackTab && !hasActiveOverlay) {
+        viewModel.navigateBackTab()
+    }
+
+    // 2. Active Ride Safety Guard: while riding on Cockpit root, require double back gesture to prevent accidental app exit
+    var lastRideBackPressMs by remember { mutableLongStateOf(0L) }
+    val rideExitGuardEnabled = activeTrip.isRiding && !canNavigateBackTab && !hasActiveOverlay
+    BackHandler(enabled = rideExitGuardEnabled) {
+        val now = System.currentTimeMillis()
+        if (now - lastRideBackPressMs < 2000L) {
+            // Allow exit on second consecutive back gesture within 2 seconds
+            (context as? ComponentActivity)?.moveTaskToBack(true)
+        } else {
+            lastRideBackPressMs = now
+            Toast.makeText(context, "Viaje en curso: desliza atrás otra vez para salir", Toast.LENGTH_SHORT).show()
         }
     }
 
     Scaffold(
         containerColor = CockpitBackground,
         bottomBar = {
-            CarPlayNavBar(
-                selectedTab = selectedTab,
-                onTabSelected = {
-                    viewModel.setSpotifyScreenVisible(false)
-                    viewModel.selectTab(it)
-                },
-                accentColor = accentColor
-            )
+            if (!showSpotifyScreen) {
+                CarPlayNavBar(
+                    selectedTab = selectedTab,
+                    onTabSelected = {
+                        viewModel.setSpotifyScreenVisible(false)
+                        viewModel.selectTab(it)
+                    },
+                    accentColor = accentColor
+                )
+            }
         },
         modifier = Modifier.fillMaxSize()
     ) { innerPadding ->
@@ -152,68 +177,78 @@ fun MainAppContent(viewModel: MotoDashboardViewModel) {
                 .fillMaxSize()
                 .padding(bottom = innerPadding.calculateBottomPadding())
         ) {
-            when (selectedTab) {
-                0 -> CockpitScreen(
-                    profile = profile,
-                    tpmsData = tpmsData,
-                    activeTrip = activeTrip,
-                    mediaState = mediaState,
-                    customBikeBitmap = customBikeBitmap,
-                    onToggleRide = { viewModel.toggleRide() },
-                    onVoiceClick = { viewModel.setVoiceDialogVisible(true) },
-                    onEmergencyClick = { viewModel.setEmergencyDialogVisible(true) },
-                    onToggleMedia = { viewModel.toggleMedia() },
-                    onNextTrack = { viewModel.nextMediaTrack() },
-                    onSimulateTpmsWarning = { viewModel.triggerSimulatedTpmsWarning() },
-                    onResetTpms = { viewModel.resetTpmsToNormal() },
-                    onOpenSpotify = { viewModel.setSpotifyScreenVisible(true) },
-                    onOpenBikeSelector = { viewModel.setBikeSelectorVisible(true) }
-                )
-                1 -> TripsScreen(
-                    tripHistory = tripHistory
-                )
-                2 -> MaintenanceScreen(
-                    profile = profile,
-                    componentIntervals = componentIntervals,
-                    services = filteredServices,
-                    searchQuery = searchQuery,
-                    selectedCategory = selectedCategory,
-                    pdfSuccessToast = pdfSuccessToast,
-                    onSearchQueryChange = { viewModel.setSearchQuery(it) },
-                    onCategorySelect = { viewModel.setServiceCategory(it) },
-                    onUpdateOdometer = { viewModel.updateOdometer(it) },
-                    onAddService = { title, cat, cost, notes -> viewModel.addNewService(title, cat, cost, notes) },
-                    onExportPdf = { viewModel.exportMaintenancePdfReport() },
-                    onSendUrgentPushAlert = { viewModel.sendUrgentMaintenancePushNotification() },
-                    onClearPdfToast = { viewModel.clearPdfToast() }
-                )
-                3 -> FuelScreen(
-                    fuelStats = fuelStats,
-                    fuelHistory = fuelHistory,
-                    onAddFuelEntry = { liters, cost -> viewModel.addNewFuelEntry(liters, cost) },
-                    onUpdateEstimatedEfficiency = { viewModel.updateEstimatedEfficiency(it) },
-                    onUpdateFuelEntry = { viewModel.updateFuelEntry(it) },
-                    onDeleteFuelEntry = { viewModel.deleteFuelEntry(it) }
-                )
-                4 -> BikeCustomizationScreen(
-                    profile = profile,
-                    emergencyContacts = emergencyContacts,
-                    customBikeBitmap = customBikeBitmap,
-                    garageList = garage,
-                    imageProcessor = viewModel.imageProcessor,
-                    onThemeSelect = { viewModel.updateTheme(it) },
-                    onUpdateBikeDetails = { nick, model, style -> viewModel.updateBikeDetails(nick, model, style) },
-                    onProcessCustomImage = { uri, style -> viewModel.processCustomMotorcycleImage(uri, style) },
-                    onSaveCutoutBitmap = { viewModel.saveProcessedCutoutBitmap(it) },
-                    onOpenBikeSelector = { viewModel.setBikeSelectorVisible(true) },
-                    onExportPdf = { viewModel.exportMaintenancePdfReport() },
-                    onOpenEmergencyDialog = { viewModel.setEmergencyDialogVisible(true) },
-                    onOpenSpotify = { viewModel.setSpotifyScreenVisible(true) }
-                )
+            Crossfade(
+                targetState = selectedTab,
+                animationSpec = tween(durationMillis = 180),
+                label = "main_tab_crossfade"
+            ) { tab ->
+                when (tab) {
+                    0 -> CockpitScreen(
+                        profile = profile,
+                        tpmsData = tpmsData,
+                        activeTrip = activeTrip,
+                        mediaState = mediaState,
+                        customBikeBitmap = customBikeBitmap,
+                        onToggleRide = { viewModel.toggleRide() },
+                        onVoiceClick = { viewModel.setVoiceDialogVisible(true) },
+                        onEmergencyClick = { viewModel.setEmergencyDialogVisible(true) },
+                        onToggleMedia = { viewModel.toggleMedia() },
+                        onNextTrack = { viewModel.nextMediaTrack() },
+                        onSimulateTpmsWarning = { viewModel.triggerSimulatedTpmsWarning() },
+                        onResetTpms = { viewModel.resetTpmsToNormal() },
+                        onOpenSpotify = { viewModel.setSpotifyScreenVisible(true) },
+                        onOpenBikeSelector = { viewModel.setBikeSelectorVisible(true) }
+                    )
+                    1 -> TripsScreen(
+                        tripHistory = tripHistory
+                    )
+                    2 -> MaintenanceScreen(
+                        profile = profile,
+                        componentIntervals = componentIntervals,
+                        services = filteredServices,
+                        searchQuery = searchQuery,
+                        selectedCategory = selectedCategory,
+                        pdfSuccessToast = pdfSuccessToast,
+                        onSearchQueryChange = { viewModel.setSearchQuery(it) },
+                        onCategorySelect = { viewModel.setServiceCategory(it) },
+                        onUpdateOdometer = { viewModel.updateOdometer(it) },
+                        onAddService = { title, cat, cost, notes -> viewModel.addNewService(title, cat, cost, notes) },
+                        onExportPdf = { viewModel.exportMaintenancePdfReport() },
+                        onSendUrgentPushAlert = { viewModel.sendUrgentMaintenancePushNotification() },
+                        onClearPdfToast = { viewModel.clearPdfToast() }
+                    )
+                    3 -> FuelScreen(
+                        fuelStats = fuelStats,
+                        fuelHistory = fuelHistory,
+                        onAddFuelEntry = { liters, cost -> viewModel.addNewFuelEntry(liters, cost) },
+                        onUpdateEstimatedEfficiency = { viewModel.updateEstimatedEfficiency(it) },
+                        onUpdateFuelEntry = { viewModel.updateFuelEntry(it) },
+                        onDeleteFuelEntry = { viewModel.deleteFuelEntry(it) }
+                    )
+                    4 -> BikeCustomizationScreen(
+                        profile = profile,
+                        emergencyContacts = emergencyContacts,
+                        customBikeBitmap = customBikeBitmap,
+                        garageList = garage,
+                        imageProcessor = viewModel.imageProcessor,
+                        onThemeSelect = { viewModel.updateTheme(it) },
+                        onUpdateBikeDetails = { nick, model, style -> viewModel.updateBikeDetails(nick, model, style) },
+                        onProcessCustomImage = { uri, style -> viewModel.processCustomMotorcycleImage(uri, style) },
+                        onSaveCutoutBitmap = { viewModel.saveProcessedCutoutBitmap(it) },
+                        onOpenBikeSelector = { viewModel.setBikeSelectorVisible(true) },
+                        onExportPdf = { viewModel.exportMaintenancePdfReport() },
+                        onOpenEmergencyDialog = { viewModel.setEmergencyDialogVisible(true) },
+                        onOpenSpotify = { viewModel.setSpotifyScreenVisible(true) }
+                    )
+                }
             }
 
-            // Spotify Screen Overlay
-            if (showSpotifyScreen) {
+            // Spotify Screen Overlay with Slide Back Transition
+            AnimatedVisibility(
+                visible = showSpotifyScreen,
+                enter = slideInHorizontally { it / 2 } + fadeIn(),
+                exit = slideOutHorizontally { it / 2 } + fadeOut()
+            ) {
                 SpotifyScreen(
                     playbackState = spotifyPlaybackState,
                     likedTracks = spotifyLikedTracks,

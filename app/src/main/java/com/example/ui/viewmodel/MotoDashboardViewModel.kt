@@ -40,6 +40,7 @@ import com.example.model.SpotifyPlaybackState
 import com.example.model.SpotifyTrack
 import com.example.model.SpotifyUser
 import com.example.service.SpotifyMusicService
+import kotlinx.coroutines.flow.map
 
 class MotoDashboardViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -77,9 +78,14 @@ class MotoDashboardViewModel(application: Application) : AndroidViewModel(applic
     private val _showBikeSelectorDialog = MutableStateFlow(false)
     val showBikeSelectorDialog: StateFlow<Boolean> = _showBikeSelectorDialog.asStateFlow()
 
-    // Navigation and Tab selection
-    private val _selectedTab = MutableStateFlow(0)
-    val selectedTab: StateFlow<Int> = _selectedTab.asStateFlow()
+    // Navigation and Tab Back Stack
+    private val _tabBackStack = MutableStateFlow(listOf(0))
+    val selectedTab: StateFlow<Int> = _tabBackStack
+        .map { it.lastOrNull() ?: 0 }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    val canNavigateBackTab: StateFlow<Boolean> = _tabBackStack
+        .map { it.size > 1 }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     // Service Filters
     private val _serviceSearchQuery = MutableStateFlow("")
@@ -143,7 +149,19 @@ class MotoDashboardViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun selectTab(index: Int) {
-        _selectedTab.value = index
+        val stack = _tabBackStack.value
+        if (stack.lastOrNull() == index) return
+        _tabBackStack.value = (stack + index).takeLast(16)
+    }
+
+    fun navigateBackTab(): Boolean {
+        val stack = _tabBackStack.value
+        return if (stack.size > 1) {
+            _tabBackStack.value = stack.dropLast(1)
+            true
+        } else {
+            false
+        }
     }
 
     fun setSearchQuery(query: String) {
@@ -224,7 +242,7 @@ class MotoDashboardViewModel(application: Application) : AndroidViewModel(applic
                 // Done via speech
             }
             is VoiceCommandResult.CheckService -> {
-                _selectedTab.value = 2 // Go to Taller
+                selectTab(2) // Go to Taller
             }
             is VoiceCommandResult.CheckSpeed -> {
                 val speed = activeTrip.value.currentSpeedKmh
